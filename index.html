@@ -1,0 +1,561 @@
+<!DOCTYPE html>
+<html lang="ro">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>AntiquaLibris · Biblioteca ta digitală</title>
+    <meta name="description" content="AntiquaLibris – bibliotecă digitală personală. Adaugă PDF-uri, citește, statistici.">
+    <meta name="theme-color" content="#8b5a2b">
+    
+    <!-- Preload critical resources -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Cormorant+Garamond:wght@400;600;700&display=swap">
+    
+    <!-- Fonts load async -->
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Cormorant+Garamond:wght@400;600;700&display=swap" media="print" onload="this.media='all'">
+    <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Cormorant+Garamond:wght@400;600;700&display=swap"></noscript>
+    
+    <!-- Critical CSS inline pentru primul ecran -->
+    <style>
+        *{margin:0;padding:0;box-sizing:border-box}
+        body{--bg:#f5f0e8;--text:#2c1a0e;--accent:#8b5a2b;font-family:'Inter',sans-serif;background:var(--bg);color:var(--text)}
+        .app{max-width:1400px;margin:0 auto;min-height:100vh}
+        .header{background:#fff8ed;padding:12px 20px;position:sticky;top:0;z-index:100}
+        .logo{display:flex;align-items:center;gap:10px}
+        .logo h1{font-family:'Cormorant Garamond',serif;color:var(--accent);font-size:1.6rem}
+        .hero{background:linear-gradient(135deg,#d4c4a8,#b89a6e);padding:60px 20px;text-align:center;color:#fff}
+        .btn-hero{background:#fff;color:#5c3d2e;border:none;padding:10px 25px;border-radius:30px;font-weight:600;cursor:pointer}
+        .visually-hidden{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden}
+    </style>
+    
+    <!-- Restul CSS se încarcă async -->
+    <link rel="preload" as="style" href="style.css" onload="this.onload=null;this.rel='stylesheet'">
+    <noscript><link rel="stylesheet" href="style.css"></noscript>
+    
+    <!-- PDF.js încărcat doar când este nevoie -->
+    <script>
+        window.pdfjsLib = null;
+        window.loadPDFJS = function() {
+            if(window.pdfjsLib) return Promise.resolve(window.pdfjsLib);
+            return new Promise((resolve) => {
+                const script = document.createElement('script');
+                script.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js';
+                script.onload = () => {
+                    window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js';
+                    resolve(window.pdfjsLib);
+                };
+                document.head.appendChild(script);
+            });
+        };
+    </script>
+</head>
+<body>
+
+<div id="cookieBox" class="cookie-box" style="position:fixed;bottom:15px;left:15px;right:15px;background:#2a2018;color:#fff;padding:12px 18px;border-radius:12px;z-index:9999;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
+    <span>🍪 Folosim cookie-uri pentru a-ți salva biblioteca.</span>
+    <button id="acceptCookiesBtn" style="background:#c49a6c;color:#fff;border:none;padding:8px 20px;border-radius:20px;cursor:pointer">Accept</button>
+</div>
+
+<div class="app">
+    <header class="header">
+        <div class="header-top" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;margin-bottom:10px">
+            <div class="logo">
+                <span style="font-size:2rem">📚✨</span>
+                <h1>AntiquaLibris</h1>
+            </div>
+            <div class="header-right" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+                <select id="langSelect" style="padding:8px 12px;border-radius:20px;border:1px solid #d4c4a8;background:#fff;font-size:0.9rem">
+                    <option value="ro">🇷🇴 RO</option>
+                    <option value="en">🇬🇧 EN</option>
+                    <option value="ru">🇷🇺 RU</option>
+                </select>
+                <input type="text" id="searchInput" placeholder="Caută carte..." style="padding:8px 12px;border-radius:20px;border:1px solid #d4c4a8;width:180px">
+                <button id="searchBtn" style="background:none;border:none;font-size:1.3rem;cursor:pointer">🔍</button>
+                <div id="authBox" style="display:flex;gap:8px">
+                    <button id="registerBtn" style="padding:8px 16px;border-radius:20px;border:1px solid #c49a6c;background:0 0;cursor:pointer">📝 Înregistrare</button>
+                    <button id="loginBtn" style="padding:8px 16px;border-radius:20px;border:1px solid #c49a6c;background:0 0;cursor:pointer">🔑 Intră</button>
+                </div>
+                <div id="userBox" style="display:none;align-items:center;gap:8px;background:#e8dcc8;padding:6px 14px;border-radius:30px">
+                    <span>👤</span>
+                    <span id="userName"></span>
+                    <button id="logoutBtn" style="background:none;border:none;cursor:pointer">✕</button>
+                </div>
+                <button id="themeBtn" style="background:none;border:none;font-size:1.3rem;cursor:pointer">🌙</button>
+            </div>
+        </div>
+        <nav class="nav" style="display:flex;gap:20px;border-top:1px solid #e8dcc8;padding-top:10px;flex-wrap:wrap">
+            <a href="#" class="nav-link active" data-page="home" style="text-decoration:none;color:#5a3a2a;font-weight:600;padding:8px 4px">🏠 Acasă</a>
+            <a href="#" class="nav-link" data-page="books" style="text-decoration:none;color:#5a3a2a;font-weight:600;padding:8px 4px">📖 Biblioteca mea</a>
+            <a href="#" class="nav-link" data-page="stats" style="text-decoration:none;color:#5a3a2a;font-weight:600;padding:8px 4px">📊 Statistici</a>
+            <a href="#" class="nav-link" data-page="about" style="text-decoration:none;color:#5a3a2a;font-weight:600;padding:8px 4px">📜 Despre noi</a>
+        </nav>
+    </header>
+
+    <!-- PAGINI -->
+    <div id="pageHome" class="page">
+        <div class="hero">
+            <h2>📚 Biblioteca ta digitală personală</h2>
+            <p>Adaugă, organizează și citește cărțile tale preferate</p>
+            <button class="btn-hero" id="startBtn">📖 Începe acum gratuit</button>
+        </div>
+        <div style="padding:40px 20px;max-width:1200px;margin:0 auto">
+            <h2 style="text-align:center;font-family:'Cormorant Garamond',serif;font-size:1.8rem;margin-bottom:30px">✨ Ce poți face</h2>
+            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:25px">
+                <div style="background:#fff;padding:30px 20px;border-radius:16px;text-align:center"><div style="font-size:3rem;margin-bottom:12px">📤</div><h3>Adaugă cărți</h3><p>Încarcă PDF-uri sau adaugă manual</p></div>
+                <div style="background:#fff;padding:30px 20px;border-radius:16px;text-align:center"><div style="font-size:3rem;margin-bottom:12px">📖</div><h3>Citește</h3><p>Deschide PDF-urile direct în browser</p></div>
+                <div style="background:#fff;padding:30px 20px;border-radius:16px;text-align:center"><div style="font-size:3rem;margin-bottom:12px">📊</div><h3>Statistici</h3><p>Vezi câte cărți ai citit</p></div>
+                <div style="background:#fff;padding:30px 20px;border-radius:16px;text-align:center"><div style="font-size:3rem;margin-bottom:12px">📤</div><h3>Export/Import</h3><p>Salvează biblioteca în JSON</p></div>
+            </div>
+        </div>
+    </div>
+
+    <div id="pageBooks" class="page" style="display:none">
+        <div style="padding:40px 20px;max-width:1200px;margin:0 auto">
+            <h2 style="text-align:center;font-family:'Cormorant Garamond',serif;font-size:1.8rem;margin-bottom:30px">📖 Biblioteca mea</h2>
+            <div style="background:#fff;padding:15px;border-radius:16px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;margin-bottom:25px">
+                <div style="display:flex;gap:8px;flex-wrap:wrap">
+                    <button class="filter-btn active" data-filter="all" style="padding:8px 16px;border-radius:30px;border:none;background:#8b5a2b;color:#fff;cursor:pointer">📚 Toate</button>
+                    <button class="filter-btn" data-filter="read" style="padding:8px 16px;border-radius:30px;border:none;background:#e8dcc8;cursor:pointer">✅ Citite</button>
+                    <button class="filter-btn" data-filter="unread" style="padding:8px 16px;border-radius:30px;border:none;background:#e8dcc8;cursor:pointer">📖 Necitite</button>
+                    <button class="filter-btn" data-filter="favorite" style="padding:8px 16px;border-radius:30px;border:none;background:#e8dcc8;cursor:pointer">⭐ Favorite</button>
+                </div>
+                <div style="display:flex;gap:10px;flex-wrap:wrap">
+                    <select id="sortSelect" style="padding:8px 14px;border-radius:20px;border:1px solid #d4c4a8">
+                        <option value="default">📋 Implicit</option>
+                        <option value="title-asc">🔤 Titlu A-Z</option>
+                        <option value="author-asc">👤 Autor A-Z</option>
+                    </select>
+                    <button id="exportBtn" style="padding:8px 16px;border-radius:20px;border:1px solid #c49a6c;background:0 0;cursor:pointer">📤 Export</button>
+                    <button id="importBtn" style="padding:8px 16px;border-radius:20px;border:1px solid #c49a6c;background:0 0;cursor:pointer">📥 Import</button>
+                    <input type="file" id="importFile" accept=".json" style="display:none">
+                    <button id="addBookBtn" style="background:#8b5a2b;color:#fff;border:none;padding:8px 18px;border-radius:20px;cursor:pointer">+ Adaugă carte</button>
+                </div>
+            </div>
+            <div id="addForm" style="display:none;background:#fff;padding:25px;border-radius:16px;margin-bottom:25px">
+                <h3>📚 Adaugă carte</h3>
+                <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:15px;margin-bottom:15px">
+                    <input type="text" id="titleInp" placeholder="Titlu *" style="padding:10px 14px;border-radius:20px;border:1px solid #d4c4a8">
+                    <input type="text" id="authorInp" placeholder="Autor *" style="padding:10px 14px;border-radius:20px;border:1px solid #d4c4a8">
+                    <input type="number" id="yearInp" placeholder="An" style="padding:10px 14px;border-radius:20px;border:1px solid #d4c4a8">
+                    <select id="genreInp" style="padding:10px 14px;border-radius:20px;border:1px solid #d4c4a8">
+                        <option value="Roman">📖 Roman</option>
+                        <option value="Poezie">🎭 Poezie</option>
+                        <option value="SF & Fantasy">🚀 SF & Fantasy</option>
+                        <option value="Istorie">🏛️ Istorie</option>
+                    </select>
+                    <input type="file" id="pdfInp" accept=".pdf" style="padding:10px 14px">
+                </div>
+                <div style="display:flex;gap:12px">
+                    <button id="confirmAddBtn" style="background:#8b5a2b;color:#fff;border:none;padding:10px 20px;border-radius:20px;cursor:pointer">✅ Adaugă</button>
+                    <button id="cancelAddBtn" style="background:#e8dcc8;border:none;padding:10px 20px;border-radius:20px;cursor:pointer">Anulează</button>
+                </div>
+            </div>
+            <div id="booksGrid" class="books-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:20px">
+                <div class="empty" style="text-align:center;padding:50px;color:#8b6946;grid-column:1/-1">📭 Biblioteca este goală</div>
+            </div>
+        </div>
+    </div>
+
+    <div id="pageStats" class="page" style="display:none">
+        <div style="padding:40px 20px;max-width:1200px;margin:0 auto">
+            <h2 style="text-align:center;font-family:'Cormorant Garamond',serif;font-size:1.8rem;margin-bottom:30px">📊 Statistici</h2>
+            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:20px;margin-bottom:30px">
+                <div class="stat-box" style="background:#fff;padding:25px;border-radius:14px;text-align:center"><span>📚</span><div id="sTotal">0</div><small>Total</small></div>
+                <div class="stat-box green" style="background:#fff;padding:25px;border-radius:14px;text-align:center;border-top:4px solid #1e7e34"><span>✅</span><div id="sRead">0</div><small>Citite</small></div>
+                <div class="stat-box yellow" style="background:#fff;padding:25px;border-radius:14px;text-align:center;border-top:4px solid #b06d1a"><span>📖</span><div id="sUnread">0</div><small>Necitite</small></div>
+                <div class="stat-box accent" style="background:#fff;padding:25px;border-radius:14px;text-align:center;border-top:4px solid #8b5a2b"><span>⭐</span><div id="sFav">0</div><small>Favorite</small></div>
+                <div class="stat-box" style="background:#fff;padding:25px;border-radius:14px;text-align:center"><span>📊</span><div id="sRate">0%</div><small>Rată</small></div>
+            </div>
+            <div class="chart" id="genreChart" style="background:#fff;padding:25px;border-radius:14px">
+                <h3>📊 Distribuție pe genuri</h3>
+                <p>Adaugă cărți...</p>
+            </div>
+        </div>
+    </div>
+
+    <div id="pageAbout" class="page" style="display:none">
+        <div style="background:linear-gradient(135deg,#d4c4a8,#b89a6e);padding:50px 20px;text-align:center;color:#fff">
+            <h2>📜 Despre AntiquaLibris</h2>
+            <p>Povestea din spatele bibliotecii tale digitale</p>
+        </div>
+        <div style="max-width:900px;margin:0 auto;padding:40px 20px">
+            <div style="display:flex;gap:25px;margin-bottom:30px;padding:30px;background:#fff;border-radius:16px">
+                <div style="font-size:2.8rem">📚</div>
+                <div><h3>Ce este AntiquaLibris?</h3><p>Biblioteca ta digitală personală.</p></div>
+            </div>
+            <div style="text-align:center;padding:40px;background:#fff;border-radius:16px">
+                <h3>Începe chiar acum!</h3>
+                <button class="btn-hero" id="ctaBtn" style="margin-top:15px">📖 Creează-ți biblioteca</button>
+            </div>
+        </div>
+    </div>
+
+    <footer style="background:#2a2018;color:#e8dcc8;padding:20px;text-align:center">
+        <p>© 2025 AntiquaLibris · Toate datele sunt salvate local</p>
+    </footer>
+</div>
+
+<!-- MODALS -->
+<div id="registerModal" class="modal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.7);align-items:center;justify-content:center;z-index:2000">
+    <div style="background:#fff;border-radius:20px;width:90%;max-width:450px">
+        <div style="display:flex;justify-content:space-between;padding:18px;border-bottom:1px solid #e8dcc8"><h3>📝 Înregistrare</h3><button id="closeRegModal" style="background:none;border:none;font-size:1.5rem;cursor:pointer">✕</button></div>
+        <div style="padding:20px;display:flex;flex-direction:column;gap:15px">
+            <input type="text" id="regName" placeholder="Nume *" style="padding:10px 14px;border-radius:20px;border:1px solid #d4c4a8">
+            <input type="password" id="regPass" placeholder="Parolă *" style="padding:10px 14px;border-radius:20px;border:1px solid #d4c4a8">
+            <div><label>Genuri preferate:</label><div style="display:flex;flex-wrap:wrap;gap:10px;margin-top:8px"><label style="background:#e8dcc8;padding:6px 14px;border-radius:20px"><input type="checkbox" value="Roman"> Roman</label><label style="background:#e8dcc8;padding:6px 14px;border-radius:20px"><input type="checkbox" value="Poezie"> Poezie</label><label style="background:#e8dcc8;padding:6px 14px;border-radius:20px"><input type="checkbox" value="SF & Fantasy"> SF</label><label style="background:#e8dcc8;padding:6px 14px;border-radius:20px"><input type="checkbox" value="Istorie"> Istorie</label></div></div>
+            <button id="confirmRegBtn" style="background:#8b5a2b;color:#fff;border:none;padding:12px;border-radius:20px;cursor:pointer">Creează cont</button>
+        </div>
+    </div>
+</div>
+
+<div id="loginModal" class="modal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.7);align-items:center;justify-content:center;z-index:2000">
+    <div style="background:#fff;border-radius:20px;width:90%;max-width:450px">
+        <div style="display:flex;justify-content:space-between;padding:18px;border-bottom:1px solid #e8dcc8"><h3>🔑 Autentificare</h3><button id="closeLogModal" style="background:none;border:none;font-size:1.5rem;cursor:pointer">✕</button></div>
+        <div style="padding:20px;display:flex;flex-direction:column;gap:15px">
+            <input type="text" id="loginName" placeholder="Nume *" style="padding:10px 14px;border-radius:20px;border:1px solid #d4c4a8">
+            <input type="password" id="loginPass" placeholder="Parolă *" style="padding:10px 14px;border-radius:20px;border:1px solid #d4c4a8">
+            <button id="confirmLogBtn" style="background:#8b5a2b;color:#fff;border:none;padding:12px;border-radius:20px;cursor:pointer">Conectare</button>
+        </div>
+    </div>
+</div>
+
+<div id="deleteModal" class="modal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.7);align-items:center;justify-content:center;z-index:2000">
+    <div style="background:#fff;border-radius:20px;width:90%;max-width:450px">
+        <div style="display:flex;justify-content:space-between;padding:18px;border-bottom:1px solid #e8dcc8"><h3>🗑️ Șterge cartea</h3><button id="closeDelModal" style="background:none;border:none;font-size:1.5rem;cursor:pointer">✕</button></div>
+        <div style="padding:20px;text-align:center">
+            <p id="deleteMsg">Ești sigur?</p>
+            <div style="display:flex;gap:12px;margin-top:15px"><button id="confirmDelBtn" style="background:#c47a5a;color:#fff;border:none;padding:10px;border-radius:20px;flex:1;cursor:pointer">Da, șterge</button><button id="cancelDelBtn" style="background:#e8dcc8;border:none;padding:10px;border-radius:20px;flex:1;cursor:pointer">Anulează</button></div>
+        </div>
+    </div>
+</div>
+
+<div id="readingModal" class="modal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.7);align-items:center;justify-content:center;z-index:2000">
+    <div style="background:#fdf8f0;border-radius:20px;width:95%;max-width:1300px;max-height:90vh;display:flex;flex-direction:column">
+        <div style="display:flex;justify-content:space-between;padding:15px;border-bottom:1px solid #e8dcc8"><h3 id="readingTitle"></h3><button id="closeReadBtn" style="background:none;border:none;font-size:1.5rem;cursor:pointer">✕</button></div>
+        <div style="display:flex;justify-content:center;padding:20px;gap:0;overflow-y:auto"><canvas id="leftCanvas" style="background:#fff;box-shadow:0 4px 20px rgba(0,0,0,0.2);max-width:100%;max-height:65vh"></canvas><div style="width:25px;background:linear-gradient(90deg,#c49a6c,#8b5a2b,#c49a6c);min-height:300px"></div><canvas id="rightCanvas" style="background:#fff;box-shadow:0 4px 20px rgba(0,0,0,0.2);max-width:100%;max-height:65vh"></canvas></div>
+        <div style="display:flex;align-items:center;gap:15px;padding:15px;border-top:1px solid #e8dcc8;flex-wrap:wrap">
+            <button id="prevBtn" style="padding:10px 16px;border-radius:15px;border:none;background:#e8dcc8;cursor:pointer">◀</button><span id="pageInfo">-</span><button id="nextBtn" style="padding:10px 16px;border-radius:15px;border:none;background:#e8dcc8;cursor:pointer">▶</button>
+            <div style="flex:1;height:8px;background:#e8dcc8;border-radius:4px"><div id="progFill" style="height:100%;background:#8b5a2b;width:0;border-radius:4px"></div></div><span id="progPct">0%</span>
+            <button id="saveProgBtn" style="padding:10px 16px;border-radius:15px;border:none;background:#8b5a2b;color:#fff;cursor:pointer">💾 Salvează</button><button id="markDoneBtn" style="padding:10px 16px;border-radius:15px;border:none;background:#1e7e34;color:#fff;cursor:pointer">✅ Terminată</button>
+        </div>
+    </div>
+</div>
+
+<!-- CHATBOT -->
+<div style="position:fixed;bottom:25px;right:25px;z-index:3000">
+    <button id="chatToggleBtn" style="width:56px;height:56px;border-radius:50%;background:#8b5a2b;color:#fff;border:none;font-size:1.8rem;cursor:pointer;box-shadow:0 6px 25px rgba(0,0,0,0.3)">💬</button>
+    <div id="chatWindow" style="display:none;position:absolute;bottom:80px;right:0;width:380px;height:540px;background:#fff;border-radius:20px;box-shadow:0 20px 60px rgba(0,0,0,0.3);flex-direction:column;overflow:hidden">
+        <div style="background:#8b5a2b;color:#fff;padding:14px 18px;display:flex;justify-content:space-between"><span>🤖 Asistent</span><button id="chatCloseBtn" style="background:rgba(255,255,255,0.2);border:none;color:#fff;width:28px;height:28px;border-radius:50%;cursor:pointer">✕</button></div>
+        <div id="chatMessages" style="flex:1;padding:15px;overflow-y:auto;display:flex;flex-direction:column;gap:12px;background:#f5f0e8"></div>
+        <div style="padding:10px 12px;display:flex;flex-wrap:wrap;gap:8px;border-top:1px solid #e8dcc8">
+            <button onclick="sendQuickMsg('Cum adaug o carte?')" style="padding:8px 14px;border-radius:25px;border:1px solid #e8dcc8;background:#f5f0e8;cursor:pointer;font-size:0.75rem">📚 Adăugare</button>
+            <button onclick="sendQuickMsg('Cum citesc un PDF?')" style="padding:8px 14px;border-radius:25px;border:1px solid #e8dcc8;background:#f5f0e8;cursor:pointer;font-size:0.75rem">📖 Citire</button>
+            <button onclick="sendQuickMsg('Ce statistici am?')" style="padding:8px 14px;border-radius:25px;border:1px solid #e8dcc8;background:#f5f0e8;cursor:pointer;font-size:0.75rem">📊 Statistici</button>
+        </div>
+        <div style="display:flex;padding:12px;border-top:1px solid #e8dcc8;gap:10px">
+            <input type="text" id="chatInput" placeholder="Scrie un mesaj..." style="flex:1;padding:10px 14px;border-radius:20px;border:1px solid #e8dcc8">
+            <button id="chatSendBtn" style="width:44px;height:44px;border-radius:50%;background:#8b5a2b;color:#fff;border:none;cursor:pointer">➤</button>
+        </div>
+    </div>
+</div>
+
+<div id="toast" style="position:fixed;bottom:20px;left:20px;background:#8b5a2b;color:#fff;padding:10px 20px;border-radius:20px;opacity:0;transition:0.3s;z-index:9999"></div>
+
+<script>
+// ========== CONFIGURARE PDF.js ==========
+let db = null;
+const DB_NAME = 'AntiquaLibrisDB';
+const DB_VERSION = 2;
+
+function openDB() {
+    return new Promise((resolve, reject) => {
+        const req = indexedDB.open(DB_NAME, DB_VERSION);
+        req.onupgradeneeded = e => {
+            const d = e.target.result;
+            if (!d.objectStoreNames.contains('users')) d.createObjectStore('users', { keyPath: 'name' });
+            if (!d.objectStoreNames.contains('books')) {
+                const s = d.createObjectStore('books', { keyPath: 'id' });
+                s.createIndex('userId', 'userId', { unique: false });
+            }
+        };
+        req.onsuccess = e => { db = e.target.result; console.log('✅ DB deschisă'); resolve(db); };
+        req.onerror = e => { console.error('❌ DB:', e.target.error); reject(e.target.error); };
+    });
+}
+
+async function saveUsers() {
+    return new Promise((resolve, reject) => {
+        const tx = db.transaction('users', 'readwrite');
+        const store = tx.objectStore('users');
+        store.clear();
+        users.forEach(u => store.put({ name: u.name, password: u.password, genres: u.genres || [] }));
+        tx.oncomplete = () => resolve();
+        tx.onerror = e => reject(e.target.error);
+    });
+}
+
+async function loadUsers() {
+    return new Promise((resolve, reject) => {
+        const tx = db.transaction('users', 'readonly');
+        const req = tx.objectStore('users').getAll();
+        req.onsuccess = () => { users = req.result.map(u => ({ ...u })); resolve(); };
+        req.onerror = e => reject(e.target.error);
+    });
+}
+
+async function saveBook(book) {
+    const tx = db.transaction('books', 'readwrite');
+    const store = tx.objectStore('books');
+    store.put({ id: book.id, userId: currentUser.name, title: book.title, author: book.author, genre: book.genre, year: book.year, status: book.status, progress: book.progress || 0, fav: book.fav || false, pdfData: book.pdfData || null });
+    return new Promise(r => { tx.oncomplete = r; });
+}
+
+async function loadBooks() {
+    return new Promise((resolve) => {
+        if (!currentUser) { books = []; resolve([]); return; }
+        const tx = db.transaction('books', 'readonly');
+        const req = tx.objectStore('books').index('userId').getAll(currentUser.name);
+        req.onsuccess = () => {
+            books = req.result.map(b => ({ ...b, pdfData: b.pdfData ? new Uint8Array(b.pdfData) : null }));
+            resolve(books);
+        };
+        req.onerror = () => { books = []; resolve([]); };
+    });
+}
+
+async function deleteBookDB(id) {
+    const tx = db.transaction('books', 'readwrite');
+    tx.objectStore('books').delete(id);
+    return new Promise(r => { tx.oncomplete = r; });
+}
+
+let users = [], currentUser = null, books = [], currentFilter = 'all', currentSort = 'default';
+let deleteId = null, pdfDoc = null, currentSpread = 0, totalSpreads = 0, currentBook = null, lang = 'ro';
+
+function q(id) { return document.getElementById(id); }
+
+function showToast(msg, err) { 
+    const t = q('toast'); 
+    if (!t) return; 
+    t.textContent = msg; 
+    t.style.background = err ? '#c47a5a' : '#8b5a2b'; 
+    t.style.opacity = '1'; 
+    t.style.display = 'block'; 
+    setTimeout(() => { t.style.opacity = '0'; }, 2000); 
+}
+
+function getEmoji(g) { 
+    const m = { 'Roman':'📖','Poezie':'🎭','SF & Fantasy':'🚀','Istorie':'🏛️','Thriller':'🔪','Filozofie':'💭','Biografie':'👤','Altele':'📚' }; 
+    return m[g] || '📚'; 
+}
+
+function showPage(page) {
+    ['pageHome','pageBooks','pageStats','pageAbout'].forEach(id => { const el = q(id); if(el) el.style.display='none'; });
+    const map = { home:'pageHome', books:'pageBooks', stats:'pageStats', about:'pageAbout' };
+    const el = q(map[page]); if(el) el.style.display='block';
+    document.querySelectorAll('.nav-link').forEach(l => l.classList.remove('active'));
+    const link = document.querySelector(`[data-page="${page}"]`); if(link) link.classList.add('active');
+    if(page==='books' && currentUser) renderBooks();
+    if(page==='stats' && currentUser) renderStats();
+}
+
+function toggleTheme() { 
+    document.body.classList.toggle('dark'); 
+    const b=q('themeBtn'); 
+    if(b) b.textContent=document.body.classList.contains('dark')?'☀️':'🌙'; 
+    localStorage.setItem('theme',document.body.classList.contains('dark')?'dark':'light'); 
+}
+
+function openModal(id) { const el=q(id); if(el) el.style.display='flex'; }
+function closeModal(id) { const el=q(id); if(el) el.style.display='none'; }
+
+async function register() {
+    const name=q('regName')?.value.trim(), pass=q('regPass')?.value;
+    if(!name||!pass){showToast('❌ Completează toate câmpurile',true);return;}
+    if(users.find(u=>u.name===name)){showToast('❌ Numele există',true);return;}
+    const genres=[]; document.querySelectorAll('#registerModal input[type=checkbox]:checked').forEach(cb=>genres.push(cb.value));
+    users.push({name,password:pass,genres});
+    await saveUsers();
+    currentUser={name,password:pass,genres}; books=[]; localStorage.setItem('lastUser',name);
+    q('authBox').style.display='none'; q('userBox').style.display='flex'; q('userName').textContent=name;
+    closeModal('registerModal'); showToast('✅ Cont creat!'); showPage('books');
+}
+
+async function login() {
+    const name=q('loginName')?.value.trim(), pass=q('loginPass')?.value;
+    if(!name||!pass){showToast('❌ Completează',true);return;}
+    const u=users.find(u=>u.name===name);
+    if(!u){showToast('❌ Negăsit',true);return;}
+    if(u.password!==pass){showToast('❌ Parolă greșită',true);return;}
+    currentUser=u; await loadBooks(); localStorage.setItem('lastUser',name);
+    q('authBox').style.display='none'; q('userBox').style.display='flex'; q('userName').textContent=name;
+    closeModal('loginModal'); showToast('👋 Bine ai venit!'); showPage('books');
+}
+
+function logout() { 
+    currentUser=null; books=[]; localStorage.removeItem('lastUser'); 
+    q('authBox').style.display='flex'; q('userBox').style.display='none'; 
+    showPage('home'); showToast('👋 Deconectat!'); 
+}
+
+function toggleAddForm() { 
+    const f=q('addForm'); 
+    if(f) f.style.display=f.style.display==='none'?'block':'none'; 
+}
+
+async function addBook() {
+    if(!currentUser){showToast('❌ Conectează-te!',true);return;}
+    const title=q('titleInp')?.value.trim(), author=q('authorInp')?.value.trim(), year=q('yearInp')?.value.trim()||'', genre=q('genreInp')?.value||'Altele', pdfFile=q('pdfInp')?.files[0];
+    if(!title||!author){showToast('❌ Titlu și autor obligatorii!',true);return;}
+    if(books.some(b=>b.title.toLowerCase()===title.toLowerCase()&&b.author.toLowerCase()===author.toLowerCase())){showToast('⚠️ Cartea există!',true);return;}
+    
+    const add=async(pdfData)=>{
+        const nb={id:Date.now(),title,author,genre,year,pdfData:pdfData||null,status:'unread',progress:0,fav:false};
+        books.push(nb); await saveBook(nb); renderBooks();
+        ['titleInp','authorInp','yearInp','pdfInp'].forEach(id=>{const el=q(id);if(el)el.value='';});
+        q('addForm').style.display='none'; showToast('📚 "'+title+'" adăugată!');
+    };
+    
+    if(pdfFile){const r=new FileReader(); r.onload=e=>add(Array.from(new Uint8Array(e.target.result))); r.readAsArrayBuffer(pdfFile);}
+    else add(null);
+}
+
+function renderBooks() {
+    const grid=q('booksGrid'); if(!grid) return;
+    let list=[...books];
+    if(currentFilter==='read') list=list.filter(b=>b.status==='read');
+    if(currentFilter==='unread') list=list.filter(b=>b.status==='unread');
+    if(currentFilter==='favorite') list=list.filter(b=>b.fav);
+    if(currentSort==='title-asc') list.sort((a,b)=>a.title.localeCompare(b.title));
+    if(currentSort==='author-asc') list.sort((a,b)=>a.author.localeCompare(b.author));
+    
+    if(list.length===0){grid.innerHTML='<div class="empty">📭 Biblioteca este goală<button onclick="toggleAddForm()" style="margin-top:10px;background:#8b5a2b;color:#fff;border:none;padding:8px 18px;border-radius:20px;cursor:pointer">+ Adaugă carte</button></div>';return;}
+    
+    grid.innerHTML=list.map(b=>`
+        <div style="background:#fff;padding:20px;border-radius:14px;border:1px solid #e8dcc8">
+            <div style="display:flex;justify-content:space-between;margin-bottom:10px"><span style="font-size:1.5rem">${getEmoji(b.genre)}</span><span onclick="toggleFav(${b.id})" style="cursor:pointer;font-size:1.2rem">${b.fav?'⭐':'☆'}</span></div>
+            <h4 style="margin-bottom:6px">${b.title} ${b.year?'<small>('+b.year+')</small>':''}</h4>
+            <p style="color:#5a3a2a;font-size:0.85rem">${b.author}</p>
+            <span style="background:#e8dcc8;padding:3px 10px;border-radius:12px;font-size:0.7rem">${b.genre}</span> ${b.pdfData?'<span style="color:#1e7e34;font-size:0.7rem">📎 PDF</span>':''}
+            ${b.progress>0&&b.progress<100?`<p style="font-size:0.8rem;color:#8b5a2b">📖 ${b.progress}%</p>`:''}
+            <span style="${b.status==='read'?'background:#1e7e34;color:#fff':'background:#b06d1a;color:#fff'};padding:3px 10px;border-radius:12px;font-size:0.7rem;display:inline-block">${b.status==='read'?'✓ Citită':'○ Necitită'}</span>
+            <div style="display:flex;gap:8px;margin-top:12px"><button onclick="readBook(${b.id})" style="padding:8px 12px;border-radius:15px;border:none;background:#e8dcc8;cursor:pointer">📖</button><button onclick="toggleStatus(${b.id})" style="padding:8px 12px;border-radius:15px;border:none;background:#e8dcc8;cursor:pointer">${b.status==='read'?'🔄':'✅'}</button><button onclick="askDelete(${b.id})" style="padding:8px 12px;border-radius:15px;border:none;background:#e8dcc8;cursor:pointer;color:#c47a5a">🗑️</button></div>
+        </div>`).join('');
+}
+
+function setFilter(f){currentFilter=f;document.querySelectorAll('.filter-btn').forEach(b=>b.classList.remove('active'));const btn=document.querySelector(`[data-filter="${f}"]`);if(btn)btn.classList.add('active');if(btn)btn.style.background='#8b5a2b';if(btn)btn.style.color='#fff';renderBooks();}
+async function toggleFav(id){const b=books.find(b=>b.id===id);if(b){b.fav=!b.fav;await saveBook(b);renderBooks();}}
+async function toggleStatus(id){const b=books.find(b=>b.id===id);if(b){b.status=b.status==='read'?'unread':'read';if(b.status==='read')b.progress=100;await saveBook(b);renderBooks();}}
+function askDelete(id){deleteId=id;const b=books.find(b=>b.id===id);if(b&&q('deleteMsg'))q('deleteMsg').textContent=`Ștergi "${b.title}"?`;openModal('deleteModal');}
+async function confirmDelete(){if(deleteId){books=books.filter(b=>b.id!==deleteId);await deleteBookDB(deleteId);deleteId=null;closeModal('deleteModal');renderBooks();showToast('🗑️ Șters!');}}
+
+function renderStats(){
+    if(!currentUser)return;
+    const t=books.length, r=books.filter(b=>b.status==='read').length, u=t-r, f=books.filter(b=>b.fav).length, rate=t?Math.round((r/t)*100):0;
+    const set=(id,v)=>{const el=q(id);if(el)el.textContent=v;};
+    set('sTotal',t);set('sRead',r);set('sUnread',u);set('sFav',f);set('sRate',rate+'%');
+    const genres={}; books.forEach(b=>{const g=b.genre||'Altele';genres[g]=(genres[g]||0)+1;});
+    const max=Math.max(...Object.values(genres),1);
+    const chart=q('genreChart');
+    if(chart) chart.innerHTML='<h3>📊 Distribuție pe genuri</h3>'+(Object.keys(genres).length===0?'<p>Adaugă cărți</p>':Object.entries(genres).map(([g,c])=>`<div style="display:flex;align-items:center;gap:10px;margin:8px 0"><span style="width:120px">${getEmoji(g)} ${g}</span><div style="flex:1;height:18px;background:#e8dcc8;border-radius:9px"><div style="width:${Math.round(c/max*100)}%;height:100%;background:#8b5a2b;border-radius:9px"></div></div><span>${c}</span></div>`).join(''));
+}
+
+async function readBook(id){
+    const b=books.find(b=>b.id===id); if(!b)return;
+    currentBook=b; q('readingTitle').textContent=`${b.title} - ${b.author}`; openModal('readingModal');
+    if(b.pdfData){
+        try{
+            await window.loadPDFJS();
+            pdfDoc = await window.pdfjsLib.getDocument({data:b.pdfData}).promise;
+            totalSpreads = Math.ceil(pdfDoc.numPages/2);
+            currentSpread = 0;
+            await renderSpread();
+        } catch(e){ showToast('❌ Eroare PDF',true); }
+    } else {
+        const c=q('leftCanvas'); if(c){c.width=500;c.height=600;const ctx=c.getContext('2d');ctx.fillStyle='#fff8ed';ctx.fillRect(0,0,500,600);ctx.fillStyle='#3e2a1f';ctx.font='16px serif';ctx.fillText(b.title,20,50);ctx.fillText('Adaugă PDF pentru a citi',20,80);}
+        q('pageInfo').textContent='Text';
+    }
+}
+async function renderSpread(){if(!pdfDoc)return;const left=currentSpread*2+1,right=left+1;if(left<=pdfDoc.numPages){const p=await pdfDoc.getPage(left);const v=p.getViewport({scale:1.2});q('leftCanvas').width=v.width;q('leftCanvas').height=v.height;await p.render({canvasContext:q('leftCanvas').getContext('2d'),viewport:v}).promise;}if(right<=pdfDoc.numPages){const p=await pdfDoc.getPage(right);const v=p.getViewport({scale:1.2});q('rightCanvas').width=v.width;q('rightCanvas').height=v.height;await p.render({canvasContext:q('rightCanvas').getContext('2d'),viewport:v}).promise;}const pct=Math.min(100,Math.round((left/pdfDoc.numPages)*100));q('progFill').style.width=pct+'%';q('progPct').textContent=pct+'%';q('pageInfo').textContent=`Pagina ${left} / ${pdfDoc.numPages}`;}
+async function nextPage(){if(pdfDoc&&currentSpread+1<totalSpreads){currentSpread++;await renderSpread();}}
+async function prevPage(){if(pdfDoc&&currentSpread>0){currentSpread--;await renderSpread();}}
+async function saveProgress(){if(currentBook&&pdfDoc){currentBook.progress=Math.min(100,Math.round(((currentSpread*2+1)/pdfDoc.numPages)*100));await saveBook(currentBook);showToast('💾 Salvat!');}}
+async function markDone(){if(currentBook){currentBook.status='read';currentBook.progress=100;await saveBook(currentBook);renderBooks();showToast('✅ Terminată!');}}
+function closeReading(){closeModal('readingModal');pdfDoc=null;currentBook=null;}
+
+function searchBooks(){const t=q('searchInput')?.value.toLowerCase().trim();if(!t){renderBooks();return;}const r=books.filter(b=>b.title.toLowerCase().includes(t)||b.author.toLowerCase().includes(t));const g=q('booksGrid');if(g)g.innerHTML=r.length?r.map(b=>`<div style="background:#fff;padding:20px;border-radius:14px"><h4>${b.title}</h4><p>${b.author}</p></div>`).join(''):'<div class="empty">🔍 Niciun rezultat</div>';}
+
+function exportBooks(){if(!books.length){showToast('Nu ai cărți',true);return;}const d=books.map(b=>({title:b.title,author:b.author,genre:b.genre,year:b.year,status:b.status}));const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([JSON.stringify(d,null,2)],{type:'application/json'}));a.download='biblioteca.json';a.click();showToast('📤 Exportat!');}
+async function importBooks(file){if(!file||!currentUser)return;const r=new FileReader();r.onload=async e=>{try{const d=JSON.parse(e.target.result);let added=0;for(const b of d){if(b.title&&b.author&&!books.some(x=>x.title===b.title&&x.author===b.author)){const nb={id:Date.now()+Math.random(),title:b.title,author:b.author,genre:b.genre||'Altele',year:b.year||'',status:b.status||'unread',progress:0,fav:false,pdfData:null};books.push(nb);await saveBook(nb);added++;}}renderBooks();showToast(`📥 ${added} importate!`);}catch(err){showToast('Eroare import',true);}};r.readAsText(file);}
+
+function toggleChat(){
+    const win=q('chatWindow'), btn=q('chatToggleBtn');
+    if(!win)return;
+    if(win.style.display==='none'||win.style.display===''){win.style.display='flex';if(btn)btn.style.display='none';
+        const msgs=q('chatMessages');if(msgs&&msgs.children.length===0){setTimeout(()=>{addChatMsg('👋 Bună! Sunt asistentul. Cu ce te pot ajuta?','bot');},200);}
+    }else{win.style.display='none';if(btn)btn.style.display='flex';}
+}
+
+function sendMsg(){
+    const inp=q('chatInput');if(!inp)return;const msg=inp.value.trim();if(!msg)return;
+    addChatMsg(msg,'user');inp.value='';
+    const msgs=q('chatMessages');const typing=document.createElement('div');typing.className='msg bot';typing.id='typing';typing.textContent='...';msgs.appendChild(typing);msgs.scrollTop=msgs.scrollHeight;
+    setTimeout(()=>{const t=q('typing');if(t)t.remove();addChatMsg(getBotReply(msg),'bot');},600);
+}
+function sendQuickMsg(msg){addChatMsg(msg,'user');const msgs=q('chatMessages');const typing=document.createElement('div');typing.className='msg bot';typing.id='typing';typing.textContent='...';msgs.appendChild(typing);msgs.scrollTop=msgs.scrollHeight;setTimeout(()=>{const t=q('typing');if(t)t.remove();addChatMsg(getBotReply(msg),'bot');},500);}
+function addChatMsg(text,type){const msgs=q('chatMessages');if(!msgs)return;const d=document.createElement('div');d.className='msg '+type;const time=new Date().toLocaleTimeString('ro-RO',{hour:'2-digit',minute:'2-digit'});d.innerHTML=text.replace(/\n/g,'<br>')+'<div style="font-size:0.6rem;opacity:0.6;margin-top:3px;text-align:right">'+time+'</div>';msgs.appendChild(d);msgs.scrollTop=msgs.scrollHeight;}
+function getBotReply(msg){const m=msg.toLowerCase();if(m.includes('adaug'))return '📚 Apasă butonul "+ Adaugă carte" din Biblioteca mea.';if(m.includes('citesc'))return '📖 Adaugă o carte cu PDF, apoi apasă butonul 📖.';if(m.includes('statistic'))return '📊 Mergi la secțiunea Statistici din meniu.';return 'Încearcă: "adaug", "citesc" sau "statistici".';}
+
+async function init(){
+    console.log('🚀 Start...');
+    try{ await openDB(); await loadUsers(); } catch(e){ console.error(e); }
+    if(localStorage.getItem('theme')==='dark'){ document.body.classList.add('dark'); const b=q('themeBtn'); if(b) b.textContent='☀️'; }
+    lang=localStorage.getItem('lang')||'ro'; const ls=q('langSelect'); if(ls) ls.value=lang;
+    const last=localStorage.getItem('lastUser');
+    if(last && users.length){ const u=users.find(u=>u.name===last); if(u){ currentUser=u; await loadBooks(); if(q('authBox')) q('authBox').style.display='none'; if(q('userBox')) q('userBox').style.display='flex'; if(q('userName')) q('userName').textContent=u.name; } }
+    if(localStorage.getItem('cookies')==='ok'){ const cb=q('cookieBox'); if(cb) cb.style.display='none'; }
+    
+    q('themeBtn')?.addEventListener('click',toggleTheme);
+    q('langSelect')?.addEventListener('change',function(){ lang=this.value; localStorage.setItem('lang',lang); });
+    q('registerBtn')?.addEventListener('click',()=>openModal('registerModal'));
+    q('loginBtn')?.addEventListener('click',()=>openModal('loginModal'));
+    q('logoutBtn')?.addEventListener('click',logout);
+    q('closeRegModal')?.addEventListener('click',()=>closeModal('registerModal'));
+    q('closeLogModal')?.addEventListener('click',()=>closeModal('loginModal'));
+    q('closeDelModal')?.addEventListener('click',()=>closeModal('deleteModal'));
+    q('cancelDelBtn')?.addEventListener('click',()=>closeModal('deleteModal'));
+    q('closeReadBtn')?.addEventListener('click',closeReading);
+    q('confirmRegBtn')?.addEventListener('click',register);
+    q('confirmLogBtn')?.addEventListener('click',login);
+    q('confirmDelBtn')?.addEventListener('click',confirmDelete);
+    q('acceptCookiesBtn')?.addEventListener('click',()=>{ localStorage.setItem('cookies','ok'); const cb=q('cookieBox'); if(cb) cb.style.display='none'; });
+    q('startBtn')?.addEventListener('click',()=>showPage('books'));
+    q('ctaBtn')?.addEventListener('click',()=>showPage('books'));
+    document.querySelectorAll('.nav-link').forEach(l=>l.addEventListener('click',function(e){ e.preventDefault(); showPage(this.dataset.page); }));
+    document.querySelectorAll('.filter-btn').forEach(b=>b.addEventListener('click',function(){ setFilter(this.dataset.filter); }));
+    q('addBookBtn')?.addEventListener('click',toggleAddForm);
+    q('cancelAddBtn')?.addEventListener('click',toggleAddForm);
+    q('confirmAddBtn')?.addEventListener('click',addBook);
+    q('sortSelect')?.addEventListener('change',function(){ currentSort=this.value; renderBooks(); });
+    q('searchBtn')?.addEventListener('click',searchBooks);
+    q('searchInput')?.addEventListener('keypress',function(e){ if(e.key==='Enter') searchBooks(); });
+    q('exportBtn')?.addEventListener('click',exportBooks);
+    q('importBtn')?.addEventListener('click',()=>{ const f=q('importFile'); if(f) f.click(); });
+    q('importFile')?.addEventListener('change',function(){ if(this.files[0]){ importBooks(this.files[0]); this.value=''; } });
+    q('prevBtn')?.addEventListener('click',prevPage);
+    q('nextBtn')?.addEventListener('click',nextPage);
+    q('saveProgBtn')?.addEventListener('click',saveProgress);
+    q('markDoneBtn')?.addEventListener('click',markDone);
+    q('chatToggleBtn')?.addEventListener('click',toggleChat);
+    q('chatCloseBtn')?.addEventListener('click',toggleChat);
+    q('chatSendBtn')?.addEventListener('click',sendMsg);
+    q('chatInput')?.addEventListener('keypress',function(e){ if(e.key==='Enter') sendMsg(); });
+    window.addEventListener('click',function(e){ if(e.target.classList.contains('modal')) e.target.style.display='none'; });
+    showPage('home');
+    console.log('✅ Gata!');
+}
+document.addEventListener('DOMContentLoaded', init);
+</script>
+</body>
+</html>
